@@ -92,12 +92,13 @@ def get_update_id() -> int:
         logger.debug(f"Wrote ID {new_id} to {file_path}")
     return gb_id
 
+# TODO: Change this into validation, separate out parsing.
 def parse_guestbook_request(request):
     # TODO: Store IP in database until end of day, don't allow repeats.
     ip = request.META["REMOTE_ADDR"]
     # if ip in database
 
-    re_chars_allowed = r"[ -~]+"  # all rendering ascii characters
+    re_chars_allowed = r"^[ -~]+$"  # all rendering ascii characters
     
     alias_size_min = 1
     alias_size_max = 32
