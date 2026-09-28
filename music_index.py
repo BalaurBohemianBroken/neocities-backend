@@ -1,8 +1,12 @@
 import credentials
 from pathlib import Path
 import json
+import requests
+import os
 
 def main():
+    upload_from = os.path.join("data", "MusicIndex")
+    
     not_indexed_count = 0
     covers_to_copy = []
     music_index = []
@@ -18,16 +22,24 @@ def main():
             if album_art is None:
                 not_indexed_count += 1
                 continue
-            # TODO: Album art
-            data = {
+            new_name = f"{artist_name}-{album_name}-{album_art.name}"
+            # Copy art to directory
+            os.link(album_art, os.join(upload_from, new_name))
+            
+            album_data = {
                 "artist": artist_name,
                 "album": album_name,
-                "art": album_art
+                "art": new_name,
+                #"release_date":
+                #"duration" 
             }
+            music_index.append(album_data)
             
-    scale_images(covers_to_copy)
-    save_data(music_index)
-    push_data()
+    # TODO: Clear remote directory
+    upload_to = os.path.join("Resources", "Music", "Index")
+    json.dump(music_index, os.join(upload_from, "music_index.json"))
+    # scale_images(covers_to_copy)
+    # push_folder(upload_from, upload_to)
     
     
 def get_directories(path: Path):
@@ -46,13 +58,39 @@ def get_album_art(path: Path):
 
 def scale_images(paths):
     # TODO: Make thumbnail sizes of the images so they load faster.
+    pass
      
 
-def save_data(data, d_to):
-    # TODO
-    pass
+def push_data(file_data: string, d_to: string):
+    url = "https://neocities.org/api/upload"
+    headers = {"Authorization": f"Bearer {credentials.neocities_api}"}
+    files = {f"{d_to}": file_data}
+    request = requests.post(url, headers=headers, files=files)
+
+    if request.status_code == 200:
+        logger.info(f"Uploaded {upload_location} to {url} successfully.")
+        response.status_code = 200
+        return response
+    
+    response.status_code = 500
+    logger.error(f"Failed to post {upload_location} to {url}\nstatus code: {request.status_code}\nresponse: {request.text}")
 
 
-def push_data(d_from, d_to):
-    # TODO: Take from views.py
-    pass
+def push_folder(d_from, d_to):
+    url = "https://neocities.org/api/upload"
+    headers = {"Authorization": f"Bearer {credentials.neocities_api}"}
+    files_to_push = [f for f in d_from if f.is_file()]
+    form_data = {}
+    for file in file_to_push:
+        to = os.join(d_to, file.name)
+        form_data[file.path] = to
+    
+    request = requests.post(url, headers=headers, data=form_data)
+
+    if request.status_code == 200:
+        logger.info(f"Uploaded folder {d_from} to {url} successfully.")
+        response.status_code = 200
+        return response
+    
+    response.status_code = 500
+    logger.error(f"Failed to post {upload_location} to {url}\nstatus code: {request.status_code}\nresponse: {request.text}")
