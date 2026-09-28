@@ -112,33 +112,37 @@ def parse_guestbook_request(request):
 
     gb_entry = GuestbookMessage()
 
-    if not request.POST:
-        logger.warning(f"Refused guestbook request: Request has no POST data.")
+    data = get_json_body(request)
+    # if not request.POST:
+    #     logger.warning(f"Refused guestbook request: Request has no POST data.")
+    #     raise BadRequest
+
+    if not verify_input_field(data, "alias", alias_size_min, alias_size_max, re_chars_allowed):
         raise BadRequest
 
-    if not verify_input_field(request, "alias", alias_size_min, alias_size_max, re_chars_allowed):
-        raise BadRequest
-
-    gb_entry.alias = request.POST["alias"]
+    gb_entry.alias = data["alias"]
 
     # Optional field.
     gb_entry.website = ""
-    if "website" in request.POST:
-        if not verify_input_field(request, "website", 0, website_size, re_chars_allowed):
+    if "website" in data:
+        if not verify_input_field(data, "website", 0, website_size, re_chars_allowed):
             raise BadRequest
-        gb_entry.website = request.POST["website"]
+        gb_entry.website = data["website"]
 
-    if not verify_input_field(request, "message", message_size_min, message_size_max, re_chars_allowed):
+    if not verify_input_field(data, "message", message_size_min, message_size_max, re_chars_allowed):
         raise BadRequest
-    gb_entry.message = request.POST["message"]
+    gb_entry.message = data["message"]
 
     # TODO: Randomized position if unfilled. Maybe client-side?
     # TODO: If randomization fails, save their message anyway so I can fix it manually.
     try:
-        loc_x = int(request.POST["loc_x"])
-        loc_y = int(request.POST["loc_y"])
+        loc_x = int(data["x"])
+        loc_y = int(data["y"])
     except ValueError:
-        logger.warning(f"Refused guestbook request: Invalid x, y value: ({request.POST['loc_x']}, {request.POST['loc_y']})")
+        logger.warning(f"Refused guestbook request: Invalid x, y value: ({data['x']}, {data['y']})")
+        raise BadRequest
+    except KeyError:
+        logger.warning(f"Refused guestbook request: No x or y field")
         raise BadRequest
 
     if abs(loc_x) > loc_x_range:
@@ -152,7 +156,7 @@ def parse_guestbook_request(request):
     gb_entry.timestamp = timestamp
     gb_entry.id = get_update_id()
 
-    logging.info("Created GuestbookMessage: {gb_entry}")
+    logging.info(f"Created GuestbookMessage: {gb_entry}")
     return gb_entry
 
     # TODO: Image size check
@@ -163,19 +167,19 @@ def parse_guestbook_request(request):
             logger.warning(f"Refused guestbook request: Input collider ({location.x}, {location.y}) overlaps ({msg.location.x}, {msg.location.y})")
             raise BadRequest
 
-def verify_input_field(request, field, size_min, size_max, charset):
-    if field not in request.POST:
+def verify_input_field(data, field, size_min, size_max, charset):
+    if field not in data:
         logger.warning(f"Refused guestbook request: Field {field} not in POST request.")
         return False
 
-    s = len(request.POST[field])
+    s = len(data[field])
     if s > size_max:
         logger.warning(f"Refused guestbook request: Field {field} is larger than {size_max} ({s})")
         return False
     if s < size_min:
         logger.warning(f"Refused guestbook request: Field {field} is smaller than {size_min} ({s})")
         return False
-    if not re.fullmatch(charset, request.POST[field]):
+    if not re.fullmatch(charset, data[field]):
         logger.warning(f"Refused guestbook request: Field {field} does not match charset.")
         return False
     
@@ -188,6 +192,11 @@ def find_unoccupied_position():
     # https://www.cs.cmu.edu/~jbruce/thesis/chapters/thesis-ch03.pdf
     pass
 
+def get_json_body(request):
+    # TODO: Error catching
+    data = json.loads(request.body)
+    logger.debug(f"Decoded data:\n{data}")
+    return data
 
 class GuestbookMessage():
     collision_distance = 32
@@ -219,7 +228,7 @@ class GuestbookMessage():
         }
 
     def __str__(self):
-        return f"GuestbookMessage \{alias: {self.alias}; website: {self.website}; message: {self.message}; location: {str(self.location)}, timestamp: {self.timestamp}, id: {self.id}\}"
+        return f"GuestbookMessage {{alias: {self.alias}; website: {self.website}; message: {self.message}; location: {str(self.location)}, timestamp: {self.timestamp}, id: {self.id}}}"
 
 
 # i reimplment this in so many languages
@@ -242,4 +251,4 @@ class Vector2():
         return Vector2(self.x - other.x, self.y - other.y)
     
     def __str__(self):
-        return f"Vector2 \{ x: {self.x}; y: {self.y}\}"
+        return f"Vector2 {{ x: {self.x}; y: {self.y}}}"
