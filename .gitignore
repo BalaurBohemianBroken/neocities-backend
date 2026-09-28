@@ -3,3 +3,5 @@ venv/
 credentials.py
 *.log
 db.sqlite3
+data/
+django.log*
