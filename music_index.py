@@ -9,6 +9,7 @@ import cv2
 from typing import List, Tuple
 import subprocess
 import argparse
+import hashlib
 
 upload_to = os.path.join("Resources", "Music", "Index")
 index_name = "music_index.json"
@@ -24,9 +25,10 @@ class MusicIndex:
     def __init__(self):
         # Settings that determine how the update is run.
         # self.update_art = True
+        self.only_unindexed = True
         self.update_songs = True  # Count, duration
         self.update_average_color = True
-        self.dont_upload = False
+        self.dry_run = False
         # self.update_album_metadata = True  # Album, artist, release date
 
         self.index = {}
@@ -37,6 +39,10 @@ class MusicIndex:
         self.unrecognized_file = []
         # TODO: Check to make sure all existing_index values are also found.
 
+    def load_index(self, path):
+        read_index = json.load(open(path, "r"))
+        self.index = read_index["index"]
+
     def do_index(self, start, album_index_limit):
         album_num = 0
         for artist in get_directories(albums_directory):
@@ -45,6 +51,10 @@ class MusicIndex:
                 if start > 0:
                     start -= 1
                     continue
+                album_hash = self.get_short_hash(album)
+                if self.only_unindexed:
+                    if album_hash in self.index:
+                        continue
                 album_num += 1
                 if album_num % 10 == 0:
                     print(f"Indexed {album_num} albums")
@@ -98,14 +108,15 @@ class MusicIndex:
                 if not album_indexed:
                     continue
                 # Using the names as filename caused issues for neocities because of ellipses.
-                album_art_name = f"{hash(artist_name + album_name)}{album_art.suffix}"
+                album_art_name = f"{album_hash}{album_art.suffix}"
                 server_art_path = os.path.join(upload_to, album_art_name)
                 if self.update_average_color:
                     average_color = get_average_color(str(album_art))
                 # Copy art to directory. TODO: Might be able to just upload directly from source.
                 # shutil.copyfile(album_art, os.path.join(art_path, album_art_name))
-                self.set_index_entry(album, artist_name, album_name, album_art, server_art_path, average_color, date, duration_total, song_count)
-
+                self.set_index_entry(album_hash, album, artist_name, album_name, album_art, server_art_path, average_color, date, duration_total, song_count)
+                if album_num >= album_index_limit:
+                    break
             if album_num >= album_index_limit:
                 break
         print("====== Unrecognized =======")
@@ -115,20 +126,21 @@ class MusicIndex:
         print("====== No art =======")
         print(self.no_art)
         print("=============")
-        self.write_index()
-        if not self.dont_upload:
+        if not self.dry_run:
+            self.write_index()
             self.upload_index()
             self.upload_art()
+        else:
+            print(self.index)
 
-    def set_index_entry(self, local_path, artist, album, local_art_path, server_art_path, average_color, release_date, duration, song_count):
-        hashed_value = hash(local_path)
-        self.local_index[hashed_value] = {
+    def set_index_entry(self, identifier, local_path, artist, album, local_art_path, server_art_path, average_color, release_date, duration, song_count):
+        self.local_index[identifier] = {
             "album_path": local_path,
             "art_path": local_art_path,
         }
 
-        self.index[hashed_value] = {
-            "hash": hashed_value,
+        self.index[identifier] = {
+            "hash": identifier,
             "artist": artist,
             "album": album,
             "art": server_art_path,
@@ -186,6 +198,10 @@ class MusicIndex:
                 return p
         return None
 
+    @staticmethod
+    def get_short_hash(string) -> str:
+        return hashlib.sha256(bytes(string)).hexdigest()[:16]
+
 class UnrecognizedFile(Exception):
     pass
 class MissingMetadata(Exception):
@@ -217,7 +233,6 @@ def get_average_color(img_path: str):
 
 def extract_all_artwork():
     for artist in get_directories(albums_directory):
-        did_something = False
         for album in get_directories(str(artist)):
             has_art = False
             # Check if artwork already exists.
@@ -242,50 +257,17 @@ def main():
                         help="Album number to start from. This is an arbitrary order, and only useful to continue a partial index.")
     parser.add_argument('count', nargs='?', type=int, default=9999, help="Number of albums to index")
     parser.add_argument('-d', "--dry", action='store_true', help="Don't upload result.")
+    parser.add_argument("--new", action='store_true', help="Destroy existing index, and recreate from scratch.")
     # parser.add_argument('-v', '--verbose',
     #                     action='store_true')  # on/off flag
     args = parser.parse_args()
     mi = MusicIndex()
-    mi.dont_upload = args.dry
+    mi.dry_run = args.dry
+
+    if not args.new:
+        mi.load_index(index_path)
+    mi.only_unindexed = not args.new
     mi.do_index(args.start, args.count)
-    return
-    upload_from = os.path.join("data", "MusicIndex")
-
-    not_indexed = []
-    covers_to_copy = []
-    music_index = []
-    # temp directory for album covers before being pushed
-    artists = get_directories(credentials.music_path)
-    for artist in artists:
-        # TODO: Read metadata from tracks instead
-        artist_name = artist.stem
-        albums = get_directories(artist)
-        for album in albums:
-            album_name = album.stem
-            album_art = get_album_art(album)
-            if album_art is None:
-                not_indexed.append(album)
-                continue
-            new_name = f"{artist_name}-{album_name}-{album_art.name}"
-            # Copy art to directory
-            shutil.copyfile(album_art, os.path.join(upload_from, new_name))
-
-            album_data = {
-                "artist": artist_name,
-                "album": album_name,
-                "art": new_name,
-                "average_color": get_average_color(str(album_art)),
-                # "release_date":
-                # "duration"
-            }
-            music_index.append(album_data)
-
-    print(f"Did not index {len(not_indexed)}")
-    #     print(not_indexed)
-    # TODO: Clear remote directory
-    with open(os.path.join(upload_from, "music_index.json"), "w") as fp:
-        json.dump(music_index, fp)
-    push_folder(upload_from, upload_to)
 
 
 if __name__ == "__main__":
