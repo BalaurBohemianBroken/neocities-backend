@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 from typing import List, Tuple
 import subprocess
+import argparse
 
 upload_to = os.path.join("Resources", "Music", "Index")
 index_name = "music_index.json"
@@ -25,6 +26,7 @@ class MusicIndex:
         # self.update_art = True
         self.update_songs = True  # Count, duration
         self.update_average_color = True
+        self.dont_upload = False
         # self.update_album_metadata = True  # Album, artist, release date
 
         self.index = {}
@@ -35,13 +37,16 @@ class MusicIndex:
         self.unrecognized_file = []
         # TODO: Check to make sure all existing_index values are also found.
 
-    def do_index(self):
+    def do_index(self, start, album_index_limit):
         album_num = 0
         for artist in get_directories(albums_directory):
             # TODO: Read metadata from tracks instead
             # artist_name = artist.stem
             albums = get_directories(str(artist))
             for album in albums:
+                if start > 0:
+                    start -= 1
+                    continue
                 album_num += 1
                 if album_num % 10 == 0:
                     print(f"Indexed {album_num} albums")
@@ -102,7 +107,7 @@ class MusicIndex:
                 # shutil.copyfile(album_art, os.path.join(art_path, album_art_name))
                 self.set_index_entry(album, artist_name, album_name, album_art, server_art_path, average_color, date, duration_total, song_count)
 
-            if album_num >= 10:
+            if album_num >= album_index_limit:
                 break
         print("====== Unrecognized =======")
         print(self.unrecognized_file)
@@ -110,10 +115,11 @@ class MusicIndex:
         print(self.missing_metadata)
         print("====== No art =======")
         print(self.no_art)
-        print("====== Uploading =======")
+        print("=============")
         self.write_index()
-        self.upload_index()
-        self.upload_art()
+        if not self.dont_upload:
+            self.upload_index()
+            self.upload_art()
 
     def set_index_entry(self, local_path, artist, album, local_art_path, server_art_path, average_color, release_date, duration, song_count):
         hashed_value = hash(local_path)
@@ -193,13 +199,33 @@ def upload_files(files: List[Tuple[str, str]]):
     print(f"Failed to post to {upload_url}\nstatus code: {request.status_code}\nresponse: {request.text}")
     return request.status_code
 
+    
+def get_directories(path: str):
+    return [f for f in Path(path).iterdir() if f.is_dir()]
+
+
+def get_average_color(img_path: str):
+    # Load the image
+    im = cv2.imread(img_path)
+    # Calculate mean of green area
+    return np.mean(im, axis=(0, 1)).tolist()
+
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('start', nargs='?', type=int, default=0,
+                        help="Album number to start from. This is an arbitrary order, and only useful to continue a partial index.")
+    parser.add_argument('count', nargs='?', type=int, default=9999, help="Number of albums to index")
+    parser.add_argument('-d', "--dry", action='store_true', help="Don't upload result.")
+    # parser.add_argument('-v', '--verbose',
+    #                     action='store_true')  # on/off flag
+    args = parser.parse_args()
     mi = MusicIndex()
-    mi.do_index()
+    mi.dont_upload = args.dry
+    mi.do_index(args.start, args.count)
     return
     upload_from = os.path.join("data", "MusicIndex")
-    
+
     not_indexed = []
     covers_to_copy = []
     music_index = []
@@ -218,74 +244,23 @@ def main():
             new_name = f"{artist_name}-{album_name}-{album_art.name}"
             # Copy art to directory
             shutil.copyfile(album_art, os.path.join(upload_from, new_name))
-            
+
             album_data = {
                 "artist": artist_name,
                 "album": album_name,
                 "art": new_name,
                 "average_color": get_average_color(str(album_art)),
-                #"release_date":
-                #"duration" 
+                # "release_date":
+                # "duration"
             }
             music_index.append(album_data)
-            
+
     print(f"Did not index {len(not_indexed)}")
-#     print(not_indexed)
+    #     print(not_indexed)
     # TODO: Clear remote directory
     with open(os.path.join(upload_from, "music_index.json"), "w") as fp:
         json.dump(music_index, fp)
     push_folder(upload_from, upload_to)
-
-    
-def get_directories(path: str):
-    return [f for f in Path(path).iterdir() if f.is_dir()]
-
-
-def get_average_color(img_path: str):
-    # Load the image
-    im = cv2.imread(img_path)
-    # Calculate mean of green area
-    return np.mean(im, axis=(0, 1)).tolist()
-
-
-def push_folder(d_from, d_to):
-    d_from = Path(d_from)
-    d_to = Path(d_to)
-    url = "https://neocities.org/api/upload"
-    headers = {"Authorization": f"Bearer {credentials.neocities_api}"}
-    local_files = [f for f in d_from.iterdir() if f.is_file()]
-    
-    files_to_push = []
-    for file in local_files:
-        push_location = os.path.join(d_to, file.name)
-        tup = (str(push_location), str(file))
-        files_to_push.append(tup)
-
-#     files_to_push = [
-#     ("Resources/Music/Index/music_index.json", "data/MusicIndex/music_index.json"),
-#     ("Resources/Music/Index/Aesop Rock-Black Hole Superette-album.jpg", "data/MusicIndex/Aesop Rock-Black Hole Superette-album.jpg")
-#     ]
-    # Push the files in chunks, so if any cause errors I can narrow it down.
-    # TODO: Play with this number to see what neocities is okay with.
-    # It has a 100MB upload limit, but that wasn't the cap I was hitting.
-    push_chunk_size = 25
-    i = 0
-    while i <= len(files_to_push):
-        files_chunk = files_to_push[i:i+push_chunk_size]
-        i += push_chunk_size
-        print(f"Pushing: {repr(files_chunk)}")
-        
-        # Get the file data from the path, and write it to the chunk
-        files_data = {pair[0]: open(pair[1], 'rb') for pair in files_chunk}
-        request = requests.post(url, headers=headers, files=files_data)
-        if request.status_code == 200:
-#             print(f"Uploaded folder {d_from} to {url} successfully.")
-            request.status_code = 200
-            continue
-        
-#         request.status_code = 500
-        print(f"Failed to post {d_from} to {url}\nstatus code: {request.status_code}\nresponse: {request.text}")
-        return
 
 
 if __name__ == "__main__":
