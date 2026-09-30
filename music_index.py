@@ -4,8 +4,200 @@ import json
 import requests
 import os
 import shutil
+import numpy as np
+import cv2
+from typing import List, Tuple
+import subprocess
+
+upload_to = os.path.join("Resources", "Music", "Index")
+index_name = "music_index.json"
+index_path = os.path.join("data", "MusicIndex", index_name)
+upload_url = "https://neocities.org/api/upload"
+neocities_header = {"Authorization": f"Bearer {credentials.neocities_api}"}
+albums_directory = credentials.music_path
+supported_audio_formats = ["opus", "mp3", "flac", "m4a"]
+supported_image_formats = ["jpg", "jpeg", "png", "webp", "webm"]
+
+
+class MusicIndex:
+    def __init__(self):
+        # Settings that determine how the update is run.
+        # self.update_art = True
+        self.update_songs = True  # Count, duration
+        self.update_average_color = True
+        # self.update_album_metadata = True  # Album, artist, release date
+
+        self.index = {}
+        # Info that should only be used in this program, such as getting local file paths.
+        self.local_index = {}
+        self.no_art = []
+        self.missing_metadata = []
+        self.unrecognized_file = []
+        # TODO: Check to make sure all existing_index values are also found.
+
+    def do_index(self):
+        album_num = 0
+        for artist in get_directories(albums_directory):
+            # TODO: Read metadata from tracks instead
+            # artist_name = artist.stem
+            albums = get_directories(str(artist))
+            for album in albums:
+                album_num += 1
+                if album_num % 10 == 0:
+                    print(f"Indexed {album_num} albums")
+                # album_name = album.stem
+                # We need art to display it on the website. Mandatory check.
+                album_art = self.get_album_art(album)
+                if album_art is None:
+                    self.no_art.append(album)
+                    continue
+
+                album_indexed = False
+                artist_name = album_name = date = ""
+                duration_total = 0
+                average_color = [0, 0, 0]
+                song_count = 0
+                for song in album.iterdir():
+                    # Check if this is an audio file. If it's an unrecognized format, report this.
+                    if song.suffix[1:] not in supported_audio_formats:
+                        if song.suffix[1:] not in supported_image_formats:
+                            self.unrecognized_file.append(song)
+                            continue
+                        continue
+
+                    metadata = self.get_metadata(str(song))
+                    try:
+                        duration = float(metadata["format"]["duration"])
+                        if not album_indexed:
+                            # TODO: Make date optional
+                            if "tags" in metadata["format"]:
+                                artist_name = metadata["format"]["tags"]["artist"]
+                                album_name = metadata["format"]["tags"]["album"]
+                                date = metadata["format"]["tags"]["date"]
+                            else:
+                                # we're in deep if it's not in the first stream
+                                artist_name = metadata["streams"][0]["tags"]["ARTIST"]
+                                album_name = metadata["streams"][0]["tags"]["ALBUM"]
+                                date = metadata["streams"][0]["tags"]["DATE"]
+                            album_indexed = True
+                    except KeyError:
+                        # We can broadly assume if one song doesn't have the right metadata, none of them do.
+                        self.missing_metadata.append(song)
+                        song_count = 0
+                        duration_total = 0
+                        break
+
+                    if not self.update_songs or not album_indexed:
+                        break
+                    duration_total += duration
+                    song_count += 1
+
+                if not album_indexed:
+                    continue
+                album_art_name = f"{artist_name}-{album_name}-{album_art.name}"
+                server_art_path = os.path.join(upload_to, album_art_name)
+                if self.update_average_color:
+                    average_color = get_average_color(str(album_art))
+                # Copy art to directory. TODO: Might be able to just upload directly from source.
+                # shutil.copyfile(album_art, os.path.join(art_path, album_art_name))
+                self.set_index_entry(album, artist_name, album_name, album_art, server_art_path, average_color, date, duration_total, song_count)
+
+            if album_num >= 10:
+                break
+        print("====== Unrecognized =======")
+        print(self.unrecognized_file)
+        print("====== Missing metadata =======")
+        print(self.missing_metadata)
+        print("====== No art =======")
+        print(self.no_art)
+        print("====== Uploading =======")
+        self.write_index()
+        self.upload_index()
+        self.upload_art()
+
+    def set_index_entry(self, local_path, artist, album, local_art_path, server_art_path, average_color, release_date, duration, song_count):
+        hashed_value = hash(local_path)
+        self.local_index[hashed_value] = {
+            "album_path": local_path,
+            "art_path": local_art_path,
+        }
+
+        self.index[hashed_value] = {
+            "hash": hashed_value,
+            "artist": artist,
+            "album": album,
+            "art": server_art_path,
+            "average_color": average_color,
+            "release_date": release_date,
+            "duration": duration,
+            "song_count": song_count,
+            # TODO: Date I got file? Might not work with bandcamp.
+        }
+
+    @staticmethod
+    def get_metadata(path: str):
+        # res = subprocess.check_output(["ffprobe", "-i", path, "-show_entries", "format=duration", "-show_entries", "format_tags=album,artist,date", "-v", "quiet", "-of", "default=nk=1:nw=1"])
+
+        # json format is slower to work with, but it's a lot more error resistant having this much info and using established libraries.
+        # we need to check both the "format" and "stream"... things, because different formats place it in different spots. opus does streams, mp3 does format.
+        res = subprocess.check_output(["ffprobe", "-i", path, "-show_entries", "format=duration", "-show_entries", "format_tags=album,artist,date", "-show_entries", "stream_tags=album,artist,date", "-v", "quiet", "-of", "json=c=1"]).decode("utf-8")
+        return json.loads(res)
+
+    def write_index(self):
+        with open(index_path, "w") as fp:
+            json.dump(self.index, fp)
+
+    def upload_index(self):
+        push_location = os.path.join(upload_to, index_name)
+        to_push = [(push_location, index_path)]
+        upload_files(to_push)
+
+    def upload_art(self):
+        to_push = []
+        for album in self.index:
+            album_index = self.index[album]
+            album_local = self.local_index[album]
+            to_push.append((album_index["art"], album_local["art_path"]))
+        # Neocities gets upset if I try to do too many at once. Chunking the list makes it okay.
+        push_chunk_size = 50
+        i = 0
+        while i <= len(to_push):
+            files_chunk = to_push[i:i + push_chunk_size]
+            i += push_chunk_size
+            upload_files(files_chunk)
+
+
+    @staticmethod
+    def get_album_art(path: Path):
+        # simple, quick, prone to breaking
+        for extension in supported_image_formats:
+            p = path / ("album." + extension)
+            if p.exists():
+                return p
+        return None
+
+class UnrecognizedFile(Exception):
+    pass
+class MissingMetadata(Exception):
+    pass
+
+def upload_files(files: List[Tuple[str, str]]):
+    print(f"Pushing: {repr(files)}")
+
+    # Get the file data from the path, and write it to the chunk
+    files_data = {pair[0]: open(pair[1], 'rb') for pair in files}
+    request = requests.post(upload_url, headers=neocities_header, files=files_data)
+    if request.status_code == 200:
+        return request.status_code
+
+    print(f"Failed to post to {upload_url}\nstatus code: {request.status_code}\nresponse: {request.text}")
+    return request.status_code
+
 
 def main():
+    mi = MusicIndex()
+    mi.do_index()
+    return
     upload_from = os.path.join("data", "MusicIndex")
     
     not_indexed = []
@@ -31,6 +223,7 @@ def main():
                 "artist": artist_name,
                 "album": album_name,
                 "art": new_name,
+                "average_color": get_average_color(str(album_art)),
                 #"release_date":
                 #"duration" 
             }
@@ -39,45 +232,20 @@ def main():
     print(f"Did not index {len(not_indexed)}")
 #     print(not_indexed)
     # TODO: Clear remote directory
-    upload_to = os.path.join("Resources", "Music", "Index")
     with open(os.path.join(upload_from, "music_index.json"), "w") as fp:
         json.dump(music_index, fp)
-    # scale_images(covers_to_copy)
     push_folder(upload_from, upload_to)
+
     
-    
-def get_directories(path: Path):
+def get_directories(path: str):
     return [f for f in Path(path).iterdir() if f.is_dir()]
-    
-
-def get_album_art(path: Path):
-    # simple, quick, prone to breaking
-    to_check = ["jpg", "png"]
-    for extension in to_check:
-        p = path / ("album." + extension)
-        if p.exists():
-            return p
-    return None
 
 
-def scale_images(paths):
-    # TODO: Make thumbnail sizes of the images so they load faster.
-    pass
-     
-
-def push_data(file_data: str, d_to: str):
-    url = "https://neocities.org/api/upload"
-    headers = {"Authorization": f"Bearer {credentials.neocities_api}"}
-    files = {f"{d_to}": file_data}
-    request = requests.post(url, headers=headers, files=files)
-
-    if request.status_code == 200:
-        logger.info(f"Uploaded {upload_location} to {url} successfully.")
-        response.status_code = 200
-        return response
-    
-    response.status_code = 500
-    logger.error(f"Failed to post {upload_location} to {url}\nstatus code: {request.status_code}\nresponse: {request.text}")
+def get_average_color(img_path: str):
+    # Load the image
+    im = cv2.imread(img_path)
+    # Calculate mean of green area
+    return np.mean(im, axis=(0, 1)).tolist()
 
 
 def push_folder(d_from, d_to):
