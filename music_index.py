@@ -40,8 +40,6 @@ class MusicIndex:
     def do_index(self, start, album_index_limit):
         album_num = 0
         for artist in get_directories(albums_directory):
-            # TODO: Read metadata from tracks instead
-            # artist_name = artist.stem
             albums = get_directories(str(artist))
             for album in albums:
                 if start > 0:
@@ -173,7 +171,6 @@ class MusicIndex:
             i += push_chunk_size
             upload_files(files_chunk)
 
-
     @staticmethod
     def get_album_art(path: Path):
         # simple, quick, prone to breaking
@@ -212,7 +209,30 @@ def get_average_color(img_path: str):
     return np.mean(im, axis=(0, 1)).tolist()
 
 
+def extract_all_artwork():
+    for artist in get_directories(albums_directory):
+        did_something = False
+        for album in get_directories(str(artist)):
+            has_art = False
+            # Check if artwork already exists.
+            for file_format in supported_image_formats:
+                if len(list(album.glob(f"*.{file_format}"))) > 0:
+                    has_art = True
+                    break
+            if has_art:
+                continue
+
+            songs = [f for f in album.iterdir() if f.suffix[1:] in supported_audio_formats]
+            try:
+                print(subprocess.check_output(["kid3-cli", "-c", "select", str(songs[0]), "-c", f'get picture:"{os.path.join(album, "album.png")}"']))
+                print("Ran on: " + str(album))
+            except:
+                print("Couldn't get picture from album: " + str(album))
+
+
 def main():
+    extract_all_artwork()
+    return
     parser = argparse.ArgumentParser()
     parser.add_argument('start', nargs='?', type=int, default=0,
                         help="Album number to start from. This is an arbitrary order, and only useful to continue a partial index.")
