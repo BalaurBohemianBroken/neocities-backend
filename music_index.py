@@ -99,7 +99,8 @@ class MusicIndex:
 
                 if not album_indexed:
                     continue
-                album_art_name = f"{artist_name}-{album_name}-{album_art.name}"
+                # Using the names as filename caused issues for neocities because of ellipses.
+                album_art_name = f"{hash(artist_name + album_name)}{album_art.suffix}"
                 server_art_path = os.path.join(upload_to, album_art_name)
                 if self.update_average_color:
                     average_color = get_average_color(str(album_art))
