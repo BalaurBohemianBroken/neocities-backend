@@ -149,8 +149,14 @@ class MusicIndex:
         return json.loads(res)
 
     def write_index(self):
+        full_index = {
+            "metadata": {
+                "omitted": len(self.no_art) + len(self.missing_metadata)
+            },
+            "index": self.index
+        }
         with open(index_path, "w") as fp:
-            json.dump(self.index, fp)
+            json.dump(full_index, fp)
 
     def upload_index(self):
         push_location = os.path.join(upload_to, index_name)
@@ -231,8 +237,6 @@ def extract_all_artwork():
 
 
 def main():
-    extract_all_artwork()
-    return
     parser = argparse.ArgumentParser()
     parser.add_argument('start', nargs='?', type=int, default=0,
                         help="Album number to start from. This is an arbitrary order, and only useful to continue a partial index.")
