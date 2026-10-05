@@ -1,9 +1,8 @@
-import credentials
+from OTScripts import credentials
 from pathlib import Path
 import json
 import requests
 import os
-import shutil
 import numpy as np
 import cv2
 from typing import List, Tuple

@@ -1,6 +1,6 @@
 __pycache__/
 venv/
-credentials.py
+OTScripts/credentials.py
 *.log
 db.sqlite3
 data/

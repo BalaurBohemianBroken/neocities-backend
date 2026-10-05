@@ -1,5 +1,4 @@
-from django.shortcuts import render
-from django.http import HttpResponse, HttpResponseNotFound
+from django.http import HttpResponse
 import re
 from time import time
 import math
@@ -8,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from django.core.exceptions import BadRequest
 import requests
-import credentials
+from OTScripts import credentials
 import os
 from typing import Dict
 
