@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-import datetime
+import datetime as dt
 import json
 import os
 import helpers
@@ -8,10 +8,12 @@ import pytz
 timezone = pytz.timezone("Europe/London")
 class Event:
     def __init__(self, first: datetime, duration: timedelta, repeat: timedelta = None, repeat_until: datetime = None, name: str = ""):
-        self.first = first.localize(timezone)
+        self.first = timezone.localize(first)
         self.duration = duration
         self.repeat = repeat
-        self.repeat_until = repeat_until.localize(timezone)
+        self.repeat_until = None
+        if repeat_until is not None:
+            self.repeat_until = timezone.localize(repeat_until)
         self.name = name
 
     @staticmethod
@@ -31,6 +33,8 @@ def add_to_schedule(event: Event, until: datetime, schedule_unsorted):
 
     while curr_time < end:
         schedule_unsorted.append(Event.serialize(event, curr_time))
+        if event.repeat is None:
+            break
         curr_time += event.repeat
 
 
@@ -39,7 +43,7 @@ def sort_schedule(unsorted_schedule):
     return sorted(unsorted_schedule, key=key)
 
 
-def schedule_events(until: datetime, timezone):
+def schedule_events(until: datetime):
     schedule = []
 
     e = Event(
@@ -126,10 +130,10 @@ def schedule_events(until: datetime, timezone):
 
 def main():
     until = datetime(2026, 11, 30, tzinfo=timezone)
-    schedule = schedule_events(until, timezone)
+    schedule = schedule_events(until)
     schedule = sort_schedule(schedule)
     dat = {
-        "updated": datetime.now(timezone),
+        "updated": datetime.now(timezone).timestamp(),
         "until": until.timestamp(),
         "schedule": schedule
     }
