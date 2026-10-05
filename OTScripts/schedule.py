@@ -36,8 +36,7 @@ def sort_schedule(unsorted_schedule):
     return sorted(unsorted_schedule, key=key)
 
 
-def main():
-    schedule_until = datetime(2026, 10, 31)
+def schedule_events(until: datetime):
     schedule = []
 
     e = Event(
@@ -46,23 +45,48 @@ def main():
         repeat=timedelta(days=1),
         name="speep"
     )
-    add_to_schedule(e, schedule_until, schedule)
+    add_to_schedule(e, until, schedule)
 
     # Classes
     e = Event(
-        first=datetime(2026, 9, 1),
+        first=datetime(2026, 9, 21, hour=9),
         duration=timedelta(hours=2),
-        repeat=timedelta(days=14),
+        repeat=timedelta(days=7),
         name="therapy class"
     )
-    add_to_schedule(e, schedule_until, schedule)
-
-    schedule = sort_schedule(schedule)
-    print(schedule)
+    add_to_schedule(e, until, schedule)
+    e = Event(
+        first=datetime(2026, 9, 21, hour=11),
+        duration=timedelta(hours=2),
+        repeat=timedelta(days=14),
+        name="psychology class"
+    )
+    add_to_schedule(e, until, schedule)
+    e = Event(
+        first=datetime(2026, 9, 24, hour=9, minute=30),
+        duration=timedelta(hours=2),
+        repeat=timedelta(days=7),
+        name="stats class"
+    )
+    add_to_schedule(e, until, schedule)
+    e = Event(
+        first=datetime(2026, 9, 29, hour=9),
+        duration=timedelta(hours=2),
+        repeat=timedelta(days=7),
+        name="psychology class"
+    )
+    add_to_schedule(e, until, schedule)
 
     # Societies
 
     # One time
+
+    return schedule
+
+def main():
+    schedule = schedule_events(datetime(2026, 10, 31))
+    schedule = sort_schedule(schedule)
+    print(schedule)
 
     # Upload to front end
     upload_to = os.path.join("Resources", "Schedule", "schedule.json")
