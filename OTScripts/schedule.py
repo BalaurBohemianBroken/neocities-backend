@@ -7,7 +7,7 @@ import pytz
 
 timezone = pytz.timezone("Europe/London")
 class Event:
-    def __init__(self, first: datetime, duration: timedelta, repeat: timedelta = None, repeat_until: datetime = None, name: str = ""):
+    def __init__(self, first: datetime, duration: timedelta, category: str, repeat: timedelta = None, repeat_until: datetime = None, name: str = ""):
         self.first = timezone.localize(first)
         self.duration = duration
         self.repeat = repeat
@@ -15,13 +15,15 @@ class Event:
         if repeat_until is not None:
             self.repeat_until = timezone.localize(repeat_until)
         self.name = name
+        self.category = category
 
     @staticmethod
     def serialize(event: 'Event', at: datetime):
         return {
             "time": at.timestamp(),
             "duration": event.duration.total_seconds(),
-            "name": event.name
+            "name": event.name,
+            "category": event.category,
         }
 
 
@@ -50,7 +52,8 @@ def schedule_events(until: datetime):
         first=datetime(2026, 9, 1),
         duration=timedelta(hours=7),
         repeat=timedelta(days=1),
-        name="stalking the shadows"
+        name="stalking the shadows",
+        category="sleep",
     )
     add_to_schedule(e, until, schedule)
 
@@ -59,28 +62,32 @@ def schedule_events(until: datetime):
         first=datetime(2026, 9, 21, hour=9),
         duration=timedelta(hours=2),
         repeat=timedelta(days=7),
-        name="mind control study"
+        name="mind control study",
+        category="work",
     )
     add_to_schedule(e, until, schedule)
     e = Event(
         first=datetime(2026, 9, 21, hour=11),
         duration=timedelta(hours=2),
         repeat=timedelta(days=14),
-        name="behaviour control"
+        name="behaviour control",
+        category="work",
     )
     add_to_schedule(e, until, schedule)
     e = Event(
         first=datetime(2026, 9, 24, hour=9, minute=30),
         duration=timedelta(hours=2),
         repeat=timedelta(days=7),
-        name="stats."
+        name="stats.",
+        category="work",
     )
     add_to_schedule(e, until, schedule)
     e = Event(
         first=datetime(2026, 9, 29, hour=9),
         duration=timedelta(hours=2),
-        repeat=timedelta(days=7),
-        name="behaviour control"
+        repeat=timedelta(days=14),
+        name="behaviour control",
+        category="work",
     )
     add_to_schedule(e, until, schedule)
 
@@ -89,7 +96,8 @@ def schedule_events(until: datetime):
         first=datetime(2026, 10, 6, hour=18),
         duration=timedelta(hours=3),
         repeat=timedelta(days=7),
-        name="on the table"
+        name="on the table",
+        category="community",
     )
     add_to_schedule(e, until, schedule)
 
@@ -97,7 +105,8 @@ def schedule_events(until: datetime):
         first=datetime(2026, 10, 5, hour=18),
         duration=timedelta(hours=3),
         repeat=timedelta(days=7),
-        name="gay"
+        name="gay",
+        category="community",
     )
     add_to_schedule(e, until, schedule)
 
@@ -105,16 +114,36 @@ def schedule_events(until: datetime):
         first=datetime(2026, 10, 9, hour=18),
         duration=timedelta(hours=3),
         repeat=timedelta(days=7),
-        name="furry"
+        name="furry",
+        category="community",
     )
     add_to_schedule(e, until, schedule)
 
     # One time
     e = Event(
+        first=datetime(2026, 10, 12, hour=7, minute=0),
+        duration=timedelta(hours=17),
+        repeat=None,
+        name="deer",
+        category="event",
+    )
+    add_to_schedule(e, until, schedule)
+
+    e = Event(
+        first=datetime(2026, 10, 8, hour=19, minute=0),
+        duration=timedelta(hours=3),
+        repeat=None,
+        name="furry games",
+        category="event",
+    )
+    add_to_schedule(e, until, schedule)
+    
+    e = Event(
         first=datetime(2026, 10, 6, hour=14, minute=15),
         duration=timedelta(hours=1),
         repeat=None,
-        name=""
+        name="",
+        category="appointment",
     )
     add_to_schedule(e, until, schedule)
 
@@ -122,7 +151,8 @@ def schedule_events(until: datetime):
         first=datetime(2026, 10, 12, hour=15, minute=15),
         duration=timedelta(hours=1),
         repeat=None,
-        name="dentist"
+        name="chomper assessment",
+        category="appointment",
     )
     add_to_schedule(e, until, schedule)
 
